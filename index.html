@@ -1,0 +1,580 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Aplikasi Arsip Surat</title>
+  <!-- Bootstrap 5 -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <!-- Bootstrap Icons -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
+  <!-- jsPDF & SheetJS (for export) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <style>
+    :root{--brand:#3b82f6}
+    body {background:#f6f8fb}
+    .nav-card{background:linear-gradient(90deg, rgba(59,130,246,0.08), rgba(59,130,246,0.02));}
+    .app-container{min-height:100vh}
+    .file-preview{max-height:220px; overflow:auto}
+    .sidebar{min-width:240px}
+    @media (max-width:991px){ .sidebar{display:none} }
+  </style>
+</head>
+<body>
+<div class="container-fluid app-container">
+  <div class="row g-0">
+    <!-- Sidebar -->
+    <nav id="sidebar" class="col-lg-3 col-xl-2 bg-white border-end sidebar p-3">
+      <div class="d-flex align-items-center mb-4">
+        <div class="me-2 bg-brand rounded-circle" style="width:44px;height:44px;background:var(--brand)"></div>
+        <div>
+          <h5 class="mb-0">Arsip Surat</h5>
+          <small class="text-muted" id="user-role-label">Guest</small>
+        </div>
+      </div>
+
+      <ul class="nav flex-column" id="main-menu">
+        <li class="nav-item"><a href="#" class="nav-link active" data-page="dashboard"><i class="bi bi-speedometer2 me-2"></i>Dashboard</a></li>
+        <li class="nav-item"><a href="#" class="nav-link" data-page="surat-masuk"><i class="bi bi-inbox-fill me-2"></i>Surat Masuk</a></li>
+        <li class="nav-item"><a href="#" class="nav-link" data-page="surat-keluar"><i class="bi bi-send-fill me-2"></i>Surat Keluar</a></li>
+        <li class="nav-item"><a href="#" class="nav-link" data-page="kategori"><i class="bi bi-tags-fill me-2"></i>Kategori Surat</a></li>
+        <li class="nav-item"><a href="#" class="nav-link" data-page="filter"><i class="bi bi-funnel-fill me-2"></i>Filter Lanjutan</a></li>
+        <li class="nav-item"><a href="#" class="nav-link" data-page="laporan"><i class="bi bi-file-earmark-text-fill me-2"></i>Laporan</a></li>
+        <li class="nav-item"><a href="#" class="nav-link" data-page="pengguna"><i class="bi bi-people-fill me-2"></i>Pengguna & Hak Akses</a></li>
+      </ul>
+
+      <div class="mt-4">
+        <button id="btn-logout" class="btn btn-outline-secondary btn-sm w-100">Logout</button>
+      </div>
+    </nav>
+
+    <!-- Main content -->
+    <main class="col-lg-9 col-xl-10 p-4">
+      <!-- Topbar for small screens -->
+      <div class="d-flex d-lg-none justify-content-between mb-3">
+        <button id="toggle-sidebar" class="btn btn-light"><i class="bi bi-list"></i></button>
+        <div><strong>Arsip Surat</strong></div>
+        <div></div>
+      </div>
+
+      <!-- Card area where pages will render -->
+      <div id="app-pages">
+        <!-- LOGIN PAGE -->
+        <section id="page-login" class="card mx-auto p-4" style="max-width:480px">
+          <div class="card-body">
+            <h4 class="card-title mb-3">Masuk — Aplikasi Arsip Surat</h4>
+            <p class="text-muted small">Gunakan username: <code>admin</code> dan password: <code>admin</code> untuk akses penuh.</p>
+            <form id="form-login">
+              <div class="mb-3">
+                <label class="form-label">Username</label>
+                <input id="login-username" class="form-control" required>
+              </div>
+              <div class="mb-3">
+                <label class="form-label">Password</label>
+                <input id="login-password" type="password" class="form-control" required>
+              </div>
+              <div class="d-grid gap-2">
+                <button class="btn btn-primary">Masuk</button>
+                <button id="btn-fill-sample" type="button" class="btn btn-outline-secondary">Isi contoh data</button>
+              </div>
+            </form>
+          </div>
+        </section>
+
+        <!-- DASHBOARD -->
+        <section id="page-dashboard" class="d-none">
+          <div class="d-flex justify-content-between align-items-center mb-3">
+            <h3>Dashboard</h3>
+            <div>
+              <span class="badge bg-primary" id="count-masuk">Surat Masuk: 0</span>
+              <span class="badge bg-success" id="count-keluar">Surat Keluar: 0</span>
+            </div>
+          </div>
+
+          <div class="row g-3">
+            <div class="col-md-6">
+              <div class="card p-3 nav-card">
+                <h5>Ringkasan Bulanan</h5>
+                <div id="monthly-summary">-</div>
+              </div>
+            </div>
+            <div class="col-md-6">
+              <div class="card p-3">
+                <h5>Aktivitas Terakhir</h5>
+                <ul id="recent-activity" class="list-group list-group-flush"></ul>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- SURAT MASUK -->
+        <section id="page-surat-masuk" class="d-none">
+          <div class="d-flex justify-content-between align-items-center mb-3">
+            <h3>Surat Masuk</h3>
+            <div>
+              <button class="btn btn-sm btn-primary" id="btn-add-masuk"><i class="bi bi-plus-circle me-1"></i>Tambah</button>
+              <input id="search-masuk" placeholder="Cari..." class="form-control form-control-sm d-inline-block ms-2" style="width:240px">
+            </div>
+          </div>
+
+          <div class="card mb-3 p-3">
+            <div id="table-masuk"></div>
+          </div>
+        </section>
+
+        <!-- SURAT KELUAR -->
+        <section id="page-surat-keluar" class="d-none">
+          <div class="d-flex justify-content-between align-items-center mb-3">
+            <h3>Surat Keluar</h3>
+            <div>
+              <button class="btn btn-sm btn-success" id="btn-add-keluar"><i class="bi bi-plus-circle me-1"></i>Tambah</button>
+              <input id="search-keluar" placeholder="Cari..." class="form-control form-control-sm d-inline-block ms-2" style="width:240px">
+            </div>
+          </div>
+
+          <div class="card mb-3 p-3">
+            <div id="table-keluar"></div>
+          </div>
+        </section>
+
+        <!-- KATEGORI -->
+        <section id="page-kategori" class="d-none">
+          <div class="d-flex justify-content-between align-items-center mb-3">
+            <h3>Kategori Surat</h3>
+            <button class="btn btn-sm btn-outline-primary" id="btn-add-kategori">Tambah Kategori</button>
+          </div>
+          <div class="card p-3">
+            <div id="table-kategori"></div>
+          </div>
+        </section>
+
+        <!-- FILTER -->
+        <section id="page-filter" class="d-none">
+          <div class="card p-3 mb-3">
+            <h5>Filter Lanjutan</h5>
+            <div class="row g-2 align-items-end">
+              <div class="col-md-4">
+                <label class="form-label">Kategori</label>
+                <select id="filter-kategori" class="form-select"><option value="">Semua</option></select>
+              </div>
+              <div class="col-md-3">
+                <label class="form-label">Status</label>
+                <select id="filter-status" class="form-select"><option value="">Semua</option><option value="draft">Draft</option><option value="final">Final</option></select>
+              </div>
+              <div class="col-md-3">
+                <label class="form-label">Jenis</label>
+                <select id="filter-jenis" class="form-select"><option value="">Semua</option><option value="masuk">Masuk</option><option value="keluar">Keluar</option></select>
+              </div>
+              <div class="col-md-2">
+                <button id="btn-filter-apply" class="btn btn-primary w-100">Terapkan</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="card p-3">
+            <div id="filter-results"></div>
+          </div>
+        </section>
+
+        <!-- LAPORAN -->
+        <section id="page-laporan" class="d-none">
+          <div class="d-flex justify-content-between align-items-center mb-3">
+            <h3>Laporan</h3>
+            <div>
+              <button id="btn-export-pdf" class="btn btn-outline-danger btn-sm"><i class="bi bi-file-earmark-pdf"></i> PDF</button>
+              <button id="btn-export-xlsx" class="btn btn-outline-success btn-sm"><i class="bi bi-file-earmark-spreadsheet"></i> Excel</button>
+            </div>
+          </div>
+
+          <div class="card p-3 mb-3">
+            <div class="row g-2 align-items-end">
+              <div class="col-md-3">
+                <label class="form-label">Jenis</label>
+                <select id="laporan-jenis" class="form-select"><option value="masuk">Surat Masuk</option><option value="keluar">Surat Keluar</option></select>
+              </div>
+              <div class="col-md-3">
+                <label class="form-label">Tahun</label>
+                <input id="laporan-tahun" type="number" class="form-control" value="2025">
+              </div>
+              <div class="col-md-3">
+                <label class="form-label">Bulan (opsional)</label>
+                <select id="laporan-bulan" class="form-select"><option value="">Semua</option>
+                  <option value="01">Januari</option><option value="02">Februari</option><option value="03">Maret</option>
+                  <option value="04">April</option><option value="05">Mei</option><option value="06">Juni</option>
+                  <option value="07">Juli</option><option value="08">Agustus</option><option value="09">September</option>
+                  <option value="10">Oktober</option><option value="11">November</option><option value="12">Desember</option>
+                </select>
+              </div>
+              <div class="col-md-3">
+                <button id="btn-laporan-apply" class="btn btn-primary w-100">Tampilkan</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="card p-3">
+            <div id="laporan-preview">
+              <table class="table table-sm table-striped">
+                <thead><tr><th>No</th><th>Nomor</th><th>Tanggal</th><th>Kategori</th><th>Perihal</th><th>Status</th><th>File</th></tr></thead>
+                <tbody id="laporan-tbody"></tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- PENGGUNA -->
+        <section id="page-pengguna" class="d-none">
+          <div class="d-flex justify-content-between align-items-center mb-3">
+            <h3>Pengguna & Hak Akses</h3>
+            <button id="btn-add-user" class="btn btn-sm btn-primary">Tambah Pengguna</button>
+          </div>
+          <div class="card p-3">
+            <div id="table-users"></div>
+          </div>
+        </section>
+
+      </div>
+
+    </main>
+  </div>
+</div>
+
+<!-- Modal: Add / Edit Surat -->
+<div class="modal fade" id="modal-surat" tabindex="-1">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <form id="form-surat">
+        <div class="modal-header">
+          <h5 class="modal-title">Tambah/Edit Surat</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <input type="hidden" id="surat-id">
+          <div class="row g-2">
+            <div class="col-md-6">
+              <label class="form-label">Jenis</label>
+              <select id="surat-jenis" class="form-select" required><option value="masuk">Masuk</option><option value="keluar">Keluar</option></select>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Kategori</label>
+              <select id="surat-kategori" class="form-select"></select>
+            </div>
+            <div class="col-md-12">
+              <label class="form-label">Nomor Surat</label>
+              <input id="surat-nomor" class="form-control" required>
+            </div>
+            <div class="col-md-12">
+              <label class="form-label">Tanggal</label>
+              <input id="surat-tanggal" type="date" class="form-control" required>
+            </div>
+            <div class="col-md-12">
+              <label class="form-label">Perihal</label>
+              <input id="surat-perihal" class="form-control" required>
+            </div>
+            <div class="col-md-12">
+              <label class="form-label">Status</label>
+              <select id="surat-status" class="form-select"><option value="draft">Draft</option><option value="final">Final</option></select>
+            </div>
+            <div class="col-md-12">
+              <label class="form-label">File (PDF / Gambar)</label>
+              <input id="surat-file" type="file" accept="application/pdf,image/*" class="form-control">
+              <div class="mt-2 file-preview" id="surat-file-preview"></div>
+            </div>
+            <div class="col-md-12">
+              <label class="form-label">Keterangan</label>
+              <textarea id="surat-keterangan" class="form-control" rows="3"></textarea>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Batal</button>
+          <button class="btn btn-primary">Simpan</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Add / Edit Kategori -->
+<div class="modal fade" id="modal-kategori" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <form id="form-kategori">
+        <div class="modal-header"><h5 class="modal-title">Tambah/Edit Kategori</h5><button class="btn-close" data-bs-dismiss="modal"></button></div>
+        <div class="modal-body">
+          <input type="hidden" id="kategori-id">
+          <label class="form-label">Nama Kategori</label>
+          <input id="kategori-nama" class="form-control" required>
+        </div>
+        <div class="modal-footer"><button class="btn btn-secondary" data-bs-dismiss="modal">Batal</button><button class="btn btn-primary">Simpan</button></div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Add / Edit User -->
+<div class="modal fade" id="modal-user" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <form id="form-user">
+        <div class="modal-header"><h5 class="modal-title">Tambah/Edit Pengguna</h5><button class="btn-close" data-bs-dismiss="modal"></button></div>
+        <div class="modal-body">
+          <input type="hidden" id="user-id">
+          <label class="form-label">Nama</label>
+          <input id="user-name" class="form-control" required>
+          <label class="form-label mt-2">Username</label>
+          <input id="user-username" class="form-control" required>
+          <label class="form-label mt-2">Password</label>
+          <input id="user-password" class="form-control" type="password">
+          <label class="form-label mt-2">Role</label>
+          <select id="user-role" class="form-select"><option value="admin">Admin</option><option value="staf">Staf</option><option value="viewer">Viewer</option></select>
+          <label class="form-label mt-2">Hak Akses (centang)</label>
+          <div class="form-check"><input class="form-check-input" type="checkbox" id="perm-create"><label class="form-check-label">Bisa Input</label></div>
+          <div class="form-check"><input class="form-check-input" type="checkbox" id="perm-edit"><label class="form-check-label">Bisa Edit</label></div>
+          <div class="form-check"><input class="form-check-input" type="checkbox" id="perm-delete"><label class="form-check-label">Bisa Hapus</label></div>
+          <div class="form-check"><input class="form-check-input" type="checkbox" id="perm-view"><label class="form-check-label">Bisa Lihat</label></div>
+        </div>
+        <div class="modal-footer"><button class="btn btn-secondary" data-bs-dismiss="modal">Batal</button><button class="btn btn-primary">Simpan</button></div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+// Simple single-file app logic using localStorage
+const DB = {
+  usersKey: 'arsip_users_v1',
+  kategoriKey: 'arsip_kategori_v1',
+  suratKey: 'arsip_surat_v1',
+  activityKey: 'arsip_activity_v1'
+}
+
+// Utilities
+const uid = ()=> Date.now().toString(36) + Math.random().toString(36).slice(2,8)
+const read = k => JSON.parse(localStorage.getItem(k) || '[]')
+const write = (k,v)=> localStorage.setItem(k, JSON.stringify(v))
+
+// Init default data if empty
+function initData(){
+  if(!localStorage.getItem(DB.usersKey)){
+    const users = [
+      {id:uid(), name:'Administrator', username:'admin', password:'admin', role:'admin', perms:{create:true,edit:true,del:true,view:true}},
+      {id:uid(), name:'Staf Contoh', username:'staf', password:'staf', role:'staf', perms:{create:true,edit:true,del:false,view:true}},
+      {id:uid(), name:'Viewer', username:'viewer', password:'viewer', role:'viewer', perms:{create:false,edit:false,del:false,view:true}}
+    ]; write(DB.usersKey, users)
+  }
+  if(!localStorage.getItem(DB.kategoriKey)){
+    write(DB.kategoriKey, [ {id:uid(), name:'Surat Kepegawaian'}, {id:uid(), name:'Surat Umum'} ])
+  }
+  if(!localStorage.getItem(DB.suratKey)){
+    write(DB.suratKey, [])
+  }
+  if(!localStorage.getItem(DB.activityKey)) write(DB.activityKey, [])
+}
+initData()
+
+// Auth
+let currentUser = null
+function login(username,password){
+  const users = read(DB.usersKey)
+  const u = users.find(x=> x.username===username && x.password===password)
+  if(u){ currentUser = u; localStorage.setItem('arsip_current_user', JSON.stringify(u)); return true }
+  return false
+}
+function logout(){ currentUser=null; localStorage.removeItem('arsip_current_user') }
+function restoreSession(){ const u = localStorage.getItem('arsip_current_user'); if(u) currentUser = JSON.parse(u) }
+restoreSession()
+
+// Navigation
+const pages = document.querySelectorAll('[id^="page-"]')
+function showPage(name){ pages.forEach(p=> p.classList.add('d-none'));
+  const el = document.getElementById('page-'+name)
+  if(el) el.classList.remove('d-none')
+  // mark menu
+  document.querySelectorAll('#main-menu .nav-link').forEach(a=> a.classList.remove('active'))
+  const menu = document.querySelector('#main-menu .nav-link[data-page="'+name+'"]')
+  if(menu) menu.classList.add('active')
+}
+
+// Sidebar toggle
+document.getElementById('toggle-sidebar').addEventListener('click', ()=>{document.getElementById('sidebar').classList.toggle('d-none')})
+
+// Menu clicks
+document.querySelectorAll('#main-menu .nav-link').forEach(a=> a.addEventListener('click', (e)=>{ e.preventDefault(); const p = a.dataset.page; if(!currentUser){ alert('Silakan login terlebih dahulu'); showPage('login'); return } showPage(p); renderAll(); }))
+
+// Login form
+document.getElementById('form-login').addEventListener('submit', (e)=>{ e.preventDefault(); const u=document.getElementById('login-username').value.trim(); const p=document.getElementById('login-password').value; if(login(u,p)){ afterLogin(); } else alert('Login gagal') })
+
+function afterLogin(){ document.getElementById('user-role-label').textContent = currentUser ? (currentUser.name + ' — ' + currentUser.role) : 'Guest'; showPage('dashboard'); renderAll(); }
+
+// Logout
+document.getElementById('btn-logout').addEventListener('click', ()=>{ logout(); location.reload() })
+
+// Fill sample data button
+document.getElementById('btn-fill-sample').addEventListener('click', ()=>{ initSample(); alert('Data contoh ditambahkan. Login sebagai admin/admin.'); })
+function initSample(){ const s = read(DB.suratKey); if(s.length) return; const k = read(DB.kategoriKey); const now = new Date().toISOString().slice(0,10);
+  s.push({id:uid(), jenis:'masuk', nomor:'SM-001', tanggal:now, perihal:'Undangan Rapat', kategori:k[0].id, status:'final', keterangan:'Undangan penting', file:null})
+  s.push({id:uid(), jenis:'keluar', nomor:'SK-001', tanggal:now, perihal:'Surat Tugas', kategori:k[1].id, status:'draft', keterangan:'Surat tugas staf', file:null})
+  write(DB.suratKey,s)
+}
+
+// CRUD Kategori
+function renderKategori(){ const data = read(DB.kategoriKey); let h = '<table class="table table-sm"><thead><tr><th>Nama</th><th class="text-end">Aksi</th></tr></thead><tbody>'
+  data.forEach(k=>{ h += `<tr><td>${k.name}</td><td class="text-end"><button class="btn btn-sm btn-outline-secondary me-1" onclick="editKategori('${k.id}')">Edit</button><button class="btn btn-sm btn-outline-danger" onclick="deleteKategori('${k.id}')">Hapus</button></td></tr>` })
+  h += '</tbody></table>'
+  document.getElementById('table-kategori').innerHTML = h
+  // populate filter & form selects
+  const sel = document.getElementById('filter-kategori'); const sk = document.getElementById('surat-kategori'); sel.innerHTML = '<option value="">Semua</option>'; sk.innerHTML=''
+  data.forEach(k=>{ sel.innerHTML += `<option value="${k.id}">${k.name}</option>`; sk.innerHTML += `<option value="${k.id}">${k.name}</option>` })
+}
+window.editKategori = function(id){ const k = read(DB.kategoriKey).find(x=> x.id===id); if(!k) return; document.getElementById('kategori-id').value=k.id; document.getElementById('kategori-nama').value=k.name; new bootstrap.Modal(document.getElementById('modal-kategori')).show(); }
+window.deleteKategori = function(id){ if(!confirm('Hapus kategori?')) return; let a = read(DB.kategoriKey); a = a.filter(x=> x.id!==id); write(DB.kategoriKey,a); renderKategori(); addActivity('Hapus kategori '+id); }
+
+document.getElementById('btn-add-kategori').addEventListener('click', ()=>{ document.getElementById('kategori-id').value=''; document.getElementById('kategori-nama').value=''; new bootstrap.Modal(document.getElementById('modal-kategori')).show(); })
+
+document.getElementById('form-kategori').addEventListener('submit', (e)=>{ e.preventDefault(); const id=document.getElementById('kategori-id').value; const name=document.getElementById('kategori-nama').value.trim(); let data = read(DB.kategoriKey); if(id){ data = data.map(x=> x.id===id ? {...x, name} : x) } else { data.push({id:uid(), name}) } write(DB.kategoriKey,data); bootstrap.Modal.getInstance(document.getElementById('modal-kategori')).hide(); renderKategori(); addActivity(id? 'Edit kategori':'Tambah kategori'); })
+
+// CRUD Users
+function renderUsers(){ const users = read(DB.usersKey); let h = '<table class="table table-sm"><thead><tr><th>Nama</th><th>Username</th><th>Role</th><th class="text-end">Aksi</th></tr></thead><tbody>'
+  users.forEach(u=>{ h+=`<tr><td>${u.name}</td><td>${u.username}</td><td>${u.role}</td><td class="text-end"><button class="btn btn-sm btn-outline-secondary me-1" onclick="editUser('${u.id}')">Edit</button><button class="btn btn-sm btn-outline-danger" onclick="deleteUser('${u.id}')">Hapus</button></td></tr>` })
+  h += '</tbody></table>'
+  document.getElementById('table-users').innerHTML = h
+}
+window.editUser = function(id){ const u = read(DB.usersKey).find(x=> x.id===id); if(!u) return; document.getElementById('user-id').value=u.id; document.getElementById('user-name').value=u.name; document.getElementById('user-username').value=u.username; document.getElementById('user-password').value=''; document.getElementById('user-role').value=u.role; document.getElementById('perm-create').checked=!!u.perms.create; document.getElementById('perm-edit').checked=!!u.perms.edit; document.getElementById('perm-delete').checked=!!u.perms.del; document.getElementById('perm-view').checked=!!u.perms.view; new bootstrap.Modal(document.getElementById('modal-user')).show(); }
+window.deleteUser = function(id){ if(!confirm('Hapus pengguna?')) return; let a=read(DB.usersKey); a=a.filter(x=> x.id!==id); write(DB.usersKey,a); renderUsers(); addActivity('Hapus pengguna'); }
+
+document.getElementById('btn-add-user').addEventListener('click', ()=>{ document.getElementById('user-id').value=''; document.getElementById('user-name').value=''; document.getElementById('user-username').value=''; document.getElementById('user-password').value=''; document.getElementById('user-role').value='staf'; document.getElementById('perm-create').checked=true; document.getElementById('perm-edit').checked=true; document.getElementById('perm-delete').checked=false; document.getElementById('perm-view').checked=true; new bootstrap.Modal(document.getElementById('modal-user')).show(); })
+
+document.getElementById('form-user').addEventListener('submit', (e)=>{ e.preventDefault(); const id=document.getElementById('user-id').value; const name=document.getElementById('user-name').value; const username=document.getElementById('user-username').value; const password=document.getElementById('user-password').value; const role=document.getElementById('user-role').value; const perms={ create:document.getElementById('perm-create').checked, edit:document.getElementById('perm-edit').checked, del:document.getElementById('perm-delete').checked, view:document.getElementById('perm-view').checked }
+  let users = read(DB.usersKey); if(id){ users = users.map(u=> u.id===id ? {...u, name, username, role, perms, ...(password?{password}: {})} : u) } else { users.push({id:uid(), name, username, password:password||'12345', role, perms}) }
+  write(DB.usersKey, users); bootstrap.Modal.getInstance(document.getElementById('modal-user')).hide(); renderUsers(); addActivity(id? 'Edit pengguna':'Tambah pengguna'); })
+
+// CRUD Surat
+function renderSuratTable(jenis){ const all = read(DB.suratKey).filter(s=> s.jenis===jenis)
+  const rows = all.map(s=>{
+    const cat = (read(DB.kategoriKey).find(k=> k.id===s.kategori) || {}).name || '-'
+    return `<tr><td>${s.nomor}</td><td>${s.tanggal}</td><td>${s.perihal}</td><td>${cat}</td><td>${s.status}</td><td class="text-end"><button class="btn btn-sm btn-outline-secondary me-1" onclick="viewSurat('${s.id}')">Lihat</button>${canEdit(s)? `<button class="btn btn-sm btn-outline-primary me-1" onclick="editSurat('${s.id}')">Edit</button>`: ''}${canDelete(s)? `<button class="btn btn-sm btn-outline-danger" onclick="deleteSurat('${s.id}')">Hapus</button>`: ''}</td></tr>`
+  }).join('')
+  const t = `<table class="table table-hover"><thead><tr><th>Nomor</th><th>Tanggal</th><th>Perihal</th><th>Kategori</th><th>Status</th><th></th></tr></thead><tbody>${rows || '<tr><td colspan="6" class="text-center text-muted">Belum ada data</td></tr>'}</tbody></table>`
+  if(jenis==='masuk') document.getElementById('table-masuk').innerHTML = t
+  else document.getElementById('table-keluar').innerHTML = t
+}
+
+window.viewSurat = function(id){ const s = read(DB.suratKey).find(x=> x.id===id); if(!s) return alert('Data tidak ditemukan'); // show modal with preview
+  document.getElementById('surat-id').value=s.id; document.getElementById('surat-jenis').value=s.jenis; document.getElementById('surat-kategori').value=s.kategori || ''; document.getElementById('surat-nomor').value=s.nomor; document.getElementById('surat-tanggal').value=s.tanggal; document.getElementById('surat-perihal').value=s.perihal; document.getElementById('surat-status').value=s.status; document.getElementById('surat-keterangan').value=s.keterangan||''
+  const preview = document.getElementById('surat-file-preview'); preview.innerHTML=''; if(s.file){ if(s.file.type.startsWith('image/')) preview.innerHTML = `<img src="${s.file.data}" class="img-fluid">`;
+    else preview.innerHTML = `<embed src="${s.file.data}" type="application/pdf" width="100%" height="400px" />` }
+  new bootstrap.Modal(document.getElementById('modal-surat')).show(); }
+
+window.editSurat = function(id){ viewSurat(id) }
+
+window.deleteSurat = function(id){ if(!confirm('Hapus surat?')) return; let a = read(DB.suratKey); a = a.filter(x=> x.id!==id); write(DB.suratKey,a); renderAll(); addActivity('Hapus surat '+id); }
+
+// helper perms
+function canCreate(){ return currentUser && !!currentUser.perms.create }
+function canEdit(){ return currentUser && !!currentUser.perms.edit }
+function canDelete(){ return currentUser && !!currentUser.perms.del }
+
+// Submit surat form
+const modalSuratEl = document.getElementById('modal-surat')
+document.getElementById('form-surat').addEventListener('submit', async (e)=>{ e.preventDefault(); if(!currentUser){ alert('akses ditolak'); return }
+  const id=document.getElementById('surat-id').value || uid(); const jenis=document.getElementById('surat-jenis').value; const kategori=document.getElementById('surat-kategori').value; const nomor=document.getElementById('surat-nomor').value; const tanggal=document.getElementById('surat-tanggal').value; const perihal=document.getElementById('surat-perihal').value; const status=document.getElementById('surat-status').value; const keterangan=document.getElementById('surat-keterangan').value; 
+  // file -> read as base64
+  const f = document.getElementById('surat-file').files[0]; let fileObj = null; if(f){ fileObj = { name:f.name, type:f.type, size:f.size, data: await fileToDataURL(f) } }
+  let data = read(DB.suratKey);
+  const exists = data.find(x=> x.id===id)
+  if(exists){ // update
+    data = data.map(x=> x.id===id ? {...x, jenis,kategori,nomor,tanggal,perihal,status,keterangan, file: fileObj || x.file }: x)
+    addActivity('Edit surat '+nomor)
+  } else { data.push({id, jenis,kategori,nomor,tanggal,perihal,status,keterangan, file:fileObj}); addActivity('Tambah surat '+nomor) }
+  write(DB.suratKey,data); bootstrap.Modal.getInstance(modalSuratEl).hide(); renderAll(); document.getElementById('surat-file').value=''; })
+
+function fileToDataURL(file){ return new Promise((res,rej)=>{ const fr=new FileReader(); fr.onload=()=> res(fr.result); fr.onerror=rej; fr.readAsDataURL(file) }) }
+
+// Search inputs
+document.getElementById('search-masuk').addEventListener('input', (e)=>{ const q=e.target.value.toLowerCase(); const data = read(DB.suratKey).filter(s=> s.jenis==='masuk' && (s.nomor.toLowerCase().includes(q) || s.perihal.toLowerCase().includes(q))); document.getElementById('table-masuk').innerHTML = tableFromArray(data) })
+document.getElementById('search-keluar').addEventListener('input', (e)=>{ const q=e.target.value.toLowerCase(); const data = read(DB.suratKey).filter(s=> s.jenis==='keluar' && (s.nomor.toLowerCase().includes(q) || s.perihal.toLowerCase().includes(q))); document.getElementById('table-keluar').innerHTML = tableFromArray(data) })
+
+function tableFromArray(arr){ const rows = arr.map(s=>{ const cat = (read(DB.kategoriKey).find(k=> k.id===s.kategori) || {}).name || '-'; return `<tr><td>${s.nomor}</td><td>${s.tanggal}</td><td>${s.perihal}</td><td>${cat}</td><td>${s.status}</td><td class="text-end"><button class="btn btn-sm btn-outline-secondary me-1" onclick="viewSurat('${s.id}')">Lihat</button>${canEdit()? `<button class="btn btn-sm btn-outline-primary me-1" onclick="editSurat('${s.id}')">Edit</button>`: ''}${canDelete()? `<button class="btn btn-sm btn-outline-danger" onclick="deleteSurat('${s.id}')">Hapus</button>`: ''}</td></tr>` }).join('')
+  return `<table class="table table-hover"><thead><tr><th>Nomor</th><th>Tanggal</th><th>Perihal</th><th>Kategori</th><th>Status</th><th></th></tr></thead><tbody>${rows || '<tr><td colspan="6" class="text-center text-muted">Belum ada data</td></tr>'}</tbody></table>` }
+
+// Filter
+document.getElementById('btn-filter-apply').addEventListener('click', ()=>{ const cat=document.getElementById('filter-kategori').value; const status=document.getElementById('filter-status').value; const jenis=document.getElementById('filter-jenis').value; let data = read(DB.suratKey); if(cat) data = data.filter(x=> x.kategori===cat); if(status) data = data.filter(x=> x.status===status); if(jenis) data = data.filter(x=> x.jenis===jenis); document.getElementById('filter-results').innerHTML = tableFromArray(data) })
+
+// Laporan export
+document.getElementById('btn-export-pdf').addEventListener('click', ()=>{ const { jsPDF } = window.jspdf; const doc = new jsPDF(); const rows = read(DB.suratKey).map(s=> [s.nomor, s.tanggal, s.perihal, (read(DB.kategoriKey).find(k=> k.id===s.kategori)||{}).name || '-', s.jenis, s.status])
+  doc.text('Laporan Arsip Surat', 14, 20); doc.autoTable({ head:[['Nomor','Tanggal','Perihal','Kategori','Jenis','Status']], startY:30, body:rows }); doc.save('laporan-arsip.pdf') })
+
+document.getElementById('btn-export-xlsx').addEventListener('click', ()=>{ const arr = read(DB.suratKey).map(s=> ({Nomor:s.nomor, Tanggal:s.tanggal, Perihal:s.perihal, Kategori:(read(DB.kategoriKey).find(k=> k.id===s.kategori)||{}).name || '-', Jenis:s.jenis, Status:s.status }))
+  const ws = XLSX.utils.json_to_sheet(arr); const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'Laporan'); XLSX.writeFile(wb,'laporan-arsip.xlsx') })
+
+// Activity log
+function addActivity(text){ const a = read(DB.activityKey); a.unshift({id:uid(), text, at:new Date().toISOString()}); write(DB.activityKey, a.slice(0,50)) }
+
+function renderActivity(){ const a = read(DB.activityKey).slice(0,10); const ul = document.getElementById('recent-activity'); ul.innerHTML = a.map(x=> `<li class="list-group-item small">${x.text} <br><small class="text-muted">${new Date(x.at).toLocaleString()}</small></li>`).join('') }
+
+// Dashboard summary
+function renderSummary(){ const s = read(DB.suratKey); const masuk = s.filter(x=> x.jenis==='masuk').length; const keluar = s.filter(x=> x.jenis==='keluar').length; document.getElementById('count-masuk').textContent = 'Surat Masuk: '+masuk; document.getElementById('count-keluar').textContent='Surat Keluar: '+keluar; const months = {}; s.forEach(x=>{ const m = x.tanggal ? x.tanggal.slice(0,7) : 'unknown'; months[m] = months[m] ? months[m]+1 : 1 }); document.getElementById('monthly-summary').innerHTML = Object.keys(months).slice(0,6).map(k=> `<div>${k}: ${months[k]} surat</div>`).join('') }
+
+// Render all main areas
+function renderAll(){ renderKategori(); renderSuratTable('masuk'); renderSuratTable('keluar'); renderUsers(); renderActivity(); renderSummary(); document.getElementById('user-role-label').textContent = currentUser ? (currentUser.name + ' — ' + currentUser.role) : 'Guest' }
+
+// Buttons: add surat
+document.getElementById('btn-add-masuk').addEventListener('click', ()=>{ if(!canCreate()){ return alert('Anda tidak memiliki izin input') } document.getElementById('surat-id').value=''; document.getElementById('surat-jenis').value='masuk'; document.getElementById('surat-kategori').value=''; document.getElementById('surat-nomor').value=''; document.getElementById('surat-tanggal').value=new Date().toISOString().slice(0,10); document.getElementById('surat-perihal').value=''; document.getElementById('surat-status').value='draft'; document.getElementById('surat-keterangan').value=''; document.getElementById('surat-file').value=''; document.getElementById('surat-file-preview').innerHTML=''; new bootstrap.Modal(document.getElementById('modal-surat')).show(); })
+
+document.getElementById('btn-add-keluar').addEventListener('click', ()=>{ if(!canCreate()){ return alert('Anda tidak memiliki izin input') } document.getElementById('surat-id').value=''; document.getElementById('surat-jenis').value='keluar'; document.getElementById('surat-kategori').value=''; document.getElementById('surat-nomor').value=''; document.getElementById('surat-tanggal').value=new Date().toISOString().slice(0,10); document.getElementById('surat-perihal').value=''; document.getElementById('surat-status').value='draft'; document.getElementById('surat-keterangan').value=''; document.getElementById('surat-file').value=''; document.getElementById('surat-file-preview').innerHTML=''; new bootstrap.Modal(document.getElementById('modal-surat')).show(); })
+
+// File preview on change
+document.getElementById('surat-file').addEventListener('change', async (e)=>{ const f = e.target.files[0]; const prev = document.getElementById('surat-file-preview'); prev.innerHTML=''; if(!f) return; const data = await fileToDataURL(f); if(f.type.startsWith('image/')) prev.innerHTML = `<img src="${data}" class="img-fluid">`; else prev.innerHTML = `<embed src="${data}" type="application/pdf" width="100%" height="300px">`; })
+
+// REPORT: render + filter + export + charts
+function buildReportRows(list){ return list.map((s,i)=>{
+  const cat = (read(DB.kategoriKey).find(k=> k.id===s.kategori) || {}).name || '-'
+  const fileBtn = s.file ? `<button class=\"btn btn-sm btn-outline-primary\" onclick=\"openFile('${s.id}')\">Lihat</button>` : ''
+  return `<tr><td>${i+1}</td><td>${s.nomor}</td><td>${s.tanggal}</td><td>${cat}</td><td>${s.perihal}</td><td>${s.status}</td><td>${fileBtn}</td></tr>`
+}).join('') }
+
+function openFile(id){ const s = read(DB.suratKey).find(x=> x.id===id); if(!s || !s.file) return alert('File tidak tersedia'); const w = window.open(); w.document.write(`<iframe src="${s.file.data}" style="width:100%;height:100vh" frameborder="0"></iframe>`); }
+
+function applyLaporan(){ const jenis = document.getElementById('laporan-jenis').value; const tahun = document.getElementById('laporan-tahun').value; const bulan = document.getElementById('laporan-bulan').value;
+  let data = read(DB.suratKey).filter(x=> x.jenis===jenis);
+  if(tahun){ data = data.filter(x=> x.tanggal && x.tanggal.slice(0,4)===String(tahun)) }
+  if(bulan){ data = data.filter(x=> x.tanggal && x.tanggal.slice(5,7)===String(bulan)) }
+  document.getElementById('laporan-tbody').innerHTML = buildReportRows(data);
+  // update charts for dashboard
+  updateCharts();
+  // store current report to be used by export
+  window._currentReport = { jenis, tahun, bulan, data };
+}
+
+document.getElementById('btn-laporan-apply').addEventListener('click', ()=> applyLaporan())
+
+// Export current report to PDF
+document.getElementById('btn-export-pdf').addEventListener('click', ()=>{
+  const { jsPDF } = window.jspdf; const doc = new jsPDF('l','pt','a4');
+  const title = 'Laporan Arsip Surat';
+  const info = window._currentReport || { jenis:'masuk', tahun:document.getElementById('laporan-tahun').value }
+  doc.setFontSize(14); doc.text(title, 40, 40);
+  doc.setFontSize(10); doc.text(`Jenis: ${info.jenis}  Periode: ${info.bulan || 'Semua'} ${info.tahun || ''}`, 40, 60);
+  const body = (info.data || read(DB.suratKey).filter(x=> x.jenis===info.jenis)).map((s,i)=> [i+1, s.nomor, s.tanggal, (read(DB.kategoriKey).find(k=> k.id===s.kategori)||{}).name || '-', s.perihal, s.status]);
+  doc.autoTable({ head:[['No','Nomor','Tanggal','Kategori','Perihal','Status']], startY:80, body });
+  doc.save(`laporan-${info.jenis}-${info.tahun || 'all'}.pdf`);
+})
+
+// Export current report to Excel
+document.getElementById('btn-export-xlsx').addEventListener('click', ()=>{
+  const info = window._currentReport || { jenis:'masuk', tahun:document.getElementById('laporan-tahun').value }
+  const arr = (info.data || read(DB.suratKey).filter(x=> x.jenis===info.jenis)).map((s,i)=> ({No:i+1, Nomor:s.nomor, Tanggal:s.tanggal, Kategori:(read(DB.kategoriKey).find(k=> k.id===s.kategori)||{}).name || '-', Perihal:s.perihal, Status:s.status }))
+  const ws = XLSX.utils.json_to_sheet(arr); const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'Laporan'); XLSX.writeFile(wb, `laporan-${info.jenis}-${info.tahun || 'all'}.xlsx`);
+})
+
+// On load: if logged in, show dashboard, else show login
+if(currentUser) afterLogin(); else showPage('login')
+
+// Expose some functions globally for inline event handlers
+window.viewSurat = window.viewSurat; window.editSurat = window.editSurat; window.deleteSurat = window.deleteSurat; window.editKategori = window.editKategori; window.deleteKategori = window.deleteKategori; window.editUser = window.editUser; window.deleteUser = window.deleteUser;
+
+</script>
+</body>
+</html>
